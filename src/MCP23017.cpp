@@ -1,19 +1,27 @@
 #include "MCP23017.h"
+#include <Wire.h>
 
-MCP23017::MCP23017(uint8_t address, TwoWire& bus) {
-	_deviceAddr = address;
-	_bus = &bus;
-}
+//Class constructor
+MCP23017::MCP23017() {}
 
-MCP23017::MCP23017(TwoWire& bus) {
-	_deviceAddr = MCP23017_I2C_ADDRESS;
-	_bus = &bus;
-}
-
-MCP23017::~MCP23017() {}
-
-void MCP23017::init()
-{
+bool MCP23017::begin(uint8_t address, TwoWire &wirePort)
+{	
+	_i2cPort = &wirePort; //Choose the wire port of the device
+	_MCP23017Address = address; //Sets the address of the device
+	
+	//make sure the TMP will acknowledge over I2c
+	_i2cPort->beginTransmission((uint8_t)_MCP23017Address);
+	if (_i2cPort->endTransmission() != 0)
+	{
+		return false;
+	}
+	
+	//Using IOCON Regiser to detect device 
+	if (detection() != true)
+	{
+		return false;
+	}
+	//Device Configuration
 	//BANK = 	0 : sequential register addresses
 	//MIRROR = 	0 : use configureInterrupt 
 	//SEQOP = 	1 : sequential operation disabled, address pointer does not increment
@@ -25,18 +33,24 @@ void MCP23017::init()
 	//UNIMPLMENTED 	0 : unimplemented: Read as ‘0’
 
 	writeRegister(MCP23017Register::IOCON, 0b00100000);
+
+	//enable all pull up resistors (will be effective for input pins only)
+	writeRegister(MCP23017Register::GPPU_A, 0xFF, 0xFF);
+	
+	return (true);
+}
+bool MCP23017::detection()
+{
+	writeRegister(MCP23017Register::IOCON, 0b00100000);
+	writeRegister(MCP23017Register::GPINTEN_A, 0b1110000);
+	uint8_t reg_value = readRegister(MCP23017Register::GPINTEN_A);
+	if (reg_value != 0b1110000) 
+	{
+		return false;
+	}
+	return (true);
 }
 
-void MCP23017::begin()
-{
-	init();
-}
-
-void MCP23017::begin(uint8_t address)
-{
-	_deviceAddr = address;
-	begin();
-}
 
 void MCP23017::portMode(MCP23017Port port, uint8_t directions, uint8_t pullups, uint8_t inverted)
 {
@@ -134,39 +148,39 @@ uint16_t MCP23017::read()
 
 void MCP23017::writeRegister(MCP23017Register reg, uint8_t value)
 {
-	_bus->beginTransmission(_deviceAddr);
-	_bus->write(static_cast<uint8_t>(reg));
-	_bus->write(value);
-	_bus->endTransmission();
+	_i2cPort->beginTransmission((uint8_t)_MCP23017Address);
+	_i2cPort->write(static_cast<uint8_t>(reg));
+	_i2cPort->write(value);
+	_i2cPort->endTransmission();
 }
 
 void MCP23017::writeRegister(MCP23017Register reg, uint8_t portA, uint8_t portB)
 {
-	_bus->beginTransmission(_deviceAddr);
-	_bus->write(static_cast<uint8_t>(reg));
-	_bus->write(portA);
-	_bus->write(portB);
-	_bus->endTransmission();
+	_i2cPort->beginTransmission((uint8_t)_MCP23017Address);
+	_i2cPort->write(static_cast<uint8_t>(reg));
+	_i2cPort->write(portA);
+	_i2cPort->write(portB);
+	_i2cPort->endTransmission();
 }
 
 
 uint8_t MCP23017::readRegister(MCP23017Register reg)
 {
-	_bus->beginTransmission(_deviceAddr);
-	_bus->write(static_cast<uint8_t>(reg));
-	_bus->endTransmission();
-	_bus->requestFrom(_deviceAddr, (uint8_t)1);
-	return _bus->read();
+	_i2cPort->beginTransmission((uint8_t)_MCP23017Address);
+	_i2cPort->write(static_cast<uint8_t>(reg));
+	_i2cPort->endTransmission();
+	_i2cPort->requestFrom((uint8_t)_MCP23017Address, (uint8_t)1);
+	return _i2cPort->read();
 }
 
 void MCP23017::readRegister(MCP23017Register reg, uint8_t& portA, uint8_t& portB)
 {
-	_bus->beginTransmission(_deviceAddr);
-	_bus->write(static_cast<uint8_t>(reg));
-	_bus->endTransmission();
-	_bus->requestFrom(_deviceAddr, (uint8_t)2);
-	portA = _bus->read();
-	portB = _bus->read();
+	_i2cPort->beginTransmission((uint8_t)_MCP23017Address);
+	_i2cPort->write(static_cast<uint8_t>(reg));
+	_i2cPort->endTransmission();
+	_i2cPort->requestFrom((uint8_t)_MCP23017Address, (uint8_t)2);
+	portA = _i2cPort->read();
+	portB = _i2cPort->read();
 }
 
 #ifdef _MCP23017_INTERRUPT_SUPPORT_
